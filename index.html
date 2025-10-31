@@ -64,7 +64,7 @@
         return;
       }
       enableInputs();
-      const endTime = startTime + 3*60*1000;
+      const endTime = startTime + 3*60*1000+10;
       const timer = setInterval(() => {
         const remaining = Math.floor((endTime - Date.now())/1000);
         if (remaining <= 0) {
