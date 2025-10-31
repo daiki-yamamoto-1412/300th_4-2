@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>管理者</title>
+<style>
+  body { text-align:center; font-family:sans-serif; margin-top:40px; }
+  button {
+    padding: 15px 25px; font-size: 18px;
+    border: none; border-radius: 12px;
+    background: #007bff; color: white; cursor: pointer;
+  }
+  button:disabled { background: #aaa; }
+  #correctList {
+    margin-top: 25px;
+    background: #f0f0f0;
+    padding: 15px;
+    border-radius: 12px;
+    display: inline-block;
+  }
+</style>
+</head>
+<body>
+  <h2>10秒後に3分タイマーを開始</h2>
+  <button id="startBtn">スタート</button>
+  <p id="status"></p>
+
+  <div id="correctList">
+    <h3>正解者一覧</h3>
+    <ul id="list"></ul>
+  </div>
+
+  <script>
+    const GAS_URL = "https://script.google.com/macros/s/AKfycbx75T9KLmPZsRRtMOz3vdoV4dIB38S5EE8JC1qnJrgngnyKGBcrMZHE3eM5lnbuCiRXXw/exec";
+
+    document.getElementById("startBtn").addEventListener("click", async () => {
+      const status = document.getElementById("status");
+      status.textContent = "10秒後にタイマーを開始します...";
+      document.getElementById("startBtn").disabled = true;
+
+      const startTime = Date.now() + 10 * 1000;
+      // Send start time to GAS and show diagnostics on the page.
+      try {
+        const res = await fetch(`${GAS_URL}?start=${startTime}`);
+        // If the response is not OK, read text for debugging.
+        if (!res.ok) {
+          const text = await res.text().catch(() => "(no body)");
+          status.textContent = `サーバー応答エラー: ${res.status} ${res.statusText} - ${text}`;
+          console.error('GAS response error', res.status, res.statusText, text);
+        } else {
+          // Try to read response text for confirmation (some GAS doGet's return simple text)
+          const text = await res.text().catch(() => "(no body)");
+          status.textContent = `開始時刻を送信しました (${text || startTime})。10秒後にタイマー開始...`;
+          console.log('GAS response', text);
+        }
+      } catch (err) {
+        // Network/CORS or other fetch error
+        status.textContent = `開始時刻の送信に失敗しました: ${err.message}`;
+        console.error('Failed to send start time to GAS:', err);
+      }
+
+      // Start the local admin timer regardless of network result so admin sees the timer.
+      setTimeout(() => {
+        status.textContent = "3分タイマー開始！";
+        startTimer(180);
+      }, 10000);
+    });
+
+    function startTimer(seconds) {
+      const status = document.getElementById("status");
+      let remaining = seconds;
+      const timer = setInterval(() => {
+        const m = Math.floor(remaining / 60);
+        const s = remaining % 60;
+        status.textContent = `残り ${m}分${s}秒`;
+        remaining--;
+        if (remaining < 0) {
+          clearInterval(timer);
+          status.textContent = "タイマー終了！";
+        }
+      }, 1000);
+    }
+
+    async function updateCorrectList() {
+      const ul = document.getElementById("list");
+      ul.innerHTML = "";
+      try {
+        const res = await fetch(`${GAS_URL}?correctList=1`);
+        if (!res.ok) {
+          const text = await res.text().catch(() => "(no body)");
+          ul.innerHTML = `<li>正解者リスト取得エラー: ${res.status} ${res.statusText} - ${text}</li>`;
+          console.error('GAS correctList fetch error', res.status, res.statusText, text);
+          return;
+        }
+        const list = await res.json().catch(e => {
+          console.error('Failed to parse JSON from correctList:', e);
+          return null;
+        });
+        if (!Array.isArray(list)) {
+          ul.innerHTML = `<li>正解者リストが空、または形式不正です</li>`;
+          return;
+        }
+        if (list.length === 0) ul.innerHTML = "<li>まだ正解者はいません</li>";
+        else list.forEach(num => {
+          const li = document.createElement("li");
+          li.textContent = "個人番号：" + num;
+          ul.appendChild(li);
+        });
+      } catch (err) {
+        ul.innerHTML = `<li>正解者リスト取得に失敗しました: ${err.message}</li>`;
+        console.error('Failed to fetch correctList from GAS:', err);
+      }
+    }
+
+    setInterval(updateCorrectList, 3000);
+  </script>
+</body>
+</html>

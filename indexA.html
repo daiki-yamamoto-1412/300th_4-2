@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>回答入力フォーム</title>
+<style>
+  body { text-align:center; font-family:sans-serif; margin-top:40px; background:#f8f9fa; }
+  #time { font-size:2em; margin-bottom:20px; }
+  input, select { font-size:1em; padding:8px; margin:5px; border-radius:8px; border:1px solid #ccc; width:200px; }
+  button { margin-top:15px; padding:10px 25px; font-size:16px; border:none; border-radius:8px; background:#007bff; color:white; cursor:pointer; }
+  button:disabled { background:#aaa; }
+  #message { margin-top:15px; font-weight:bold; }
+</style>
+</head>
+<body>
+  <h2>共有タイマー</h2>
+  <p id="time">待機中...</p>
+
+  <div id="formArea">
+    <h3>個人番号を入力</h3>
+    <input type="number" id="number" placeholder="例：0001" />
+
+    <h3>レベルを選択</h3>
+    <select id="level">
+      <option value="">選択してください</option>
+      <option value="レベル1">簡単</option>
+      <option value="レベル2">難しい</option>
+    </select>
+
+    <h3>回答を入力</h3>
+    <input type="text" id="answer" placeholder="回答を入力" />
+
+    <br>
+    <button id="sendBtn">送信</button>
+
+    <p id="message"></p>
+  </div>
+
+  <script>
+    const GAS_URL = "https://script.google.com/macros/s/AKfycbx75T9KLmPZsRRtMOz3vdoV4dIB38S5EE8JC1qnJrgngnyKGBcrMZHE3eM5lnbuCiRXXw/exec";
+    const correctAnswers = { "レベル1":"", "レベル2":"banana" };
+
+    async function getStartTime() {
+      const res = await fetch(GAS_URL);
+      const text = await res.text();
+      const startTime = Number(text);
+      if (isNaN(startTime) || startTime === 0) return null;
+      return startTime;
+    }
+
+    async function startCountdown() {
+      const timeEl = document.getElementById("time");
+      const startTime = await getStartTime();
+      if (!startTime) {
+        // 開始時間が未設定のときは「待機中」と表示しフォームを非表示にする
+        timeEl.textContent = "待機中";
+        disableInputs();
+        setTimeout(startCountdown, 3000);
+        return;
+      }
+      // startTime を取得できたらフォームを表示する
+      enableInputs();
+      const endTime = startTime + 3*60*1000;
+      const timer = setInterval(() => {
+        const remaining = Math.floor((endTime - Date.now())/1000);
+        if (remaining <= 0) {
+          clearInterval(timer);
+          timeEl.textContent = "タイマー終了！";
+          disableInputs();
+          // 5秒後に「待機中」を表示する
+          setTimeout(() => {
+            timeEl.textContent = "待機中";
+          }, 5000);
+          return;
+        }
+        const m = Math.floor(remaining/60);
+        const s = remaining % 60;
+        timeEl.textContent = `残り ${m}分${s}秒`;
+      }, 1000);
+    }
+
+    // タイマー終了時に入力欄を消す（非表示）ためのユーティリティ
+    function disableInputs() {
+      const formArea = document.getElementById('formArea');
+      if (formArea) formArea.style.display = 'none';
+      const sendBtn = document.getElementById('sendBtn');
+      if (sendBtn) sendBtn.disabled = true;
+      const message = document.getElementById('message');
+      if (message) {
+        message.textContent = '';
+      }
+    }
+
+    // フォームを再表示するユーティリティ
+    function enableInputs() {
+      const formArea = document.getElementById('formArea');
+      if (formArea) formArea.style.display = '';
+      const sendBtn = document.getElementById('sendBtn');
+      if (sendBtn) sendBtn.disabled = false;
+    }
+
+    startCountdown();
+
+    document.getElementById("sendBtn").addEventListener("click", async () => {
+      const number = document.getElementById("number").value.trim();
+      const level = document.getElementById("level").value;
+      const answer = document.getElementById("answer").value.trim();
+      const message = document.getElementById("message");
+
+      if (!number || !level || !answer) {
+        message.textContent="すべての項目を入力してください"; message.style.color="red"; return;
+      }
+
+      const result = (answer.toLowerCase()===correctAnswers[level].toLowerCase()) ? "正解" : "不正解";
+
+      await fetch(`${GAS_URL}?number=${encodeURIComponent(number)}&level=${encodeURIComponent(level)}&answer=${encodeURIComponent(answer)}&result=${encodeURIComponent(result)}`);
+
+      message.textContent=`送信完了！（${result}）`;
+      message.style.color = (result==="正解")?"green":"red";
+      document.getElementById("answer").value="";
+    });
+  </script>
+</body>
+</html>
