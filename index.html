@@ -39,27 +39,30 @@
 
   <script>
     const GAS_URL = "https://script.google.com/macros/s/AKfycbx75T9KLmPZsRRtMOz3vdoV4dIB38S5EE8JC1qnJrgngnyKGBcrMZHE3eM5lnbuCiRXXw/exec";
+    // 各レベルの正答を設定してください。例: "レベル1": "apple"
     const correctAnswers = { "レベル1":"", "レベル2":"banana" };
 
     async function getStartTime() {
-      const res = await fetch(GAS_URL);
-      const text = await res.text();
-      const startTime = Number(text);
-      if (isNaN(startTime) || startTime === 0) return null;
-      return startTime;
+      try {
+        const res = await fetch(GAS_URL);
+        const text = await res.text();
+        const startTime = Number(text);
+        if (isNaN(startTime) || startTime === 0) return null;
+        return startTime;
+      } catch (e) {
+        return null;
+      }
     }
 
     async function startCountdown() {
       const timeEl = document.getElementById("time");
       const startTime = await getStartTime();
       if (!startTime) {
-        // 開始時間が未設定のときは「待機中」と表示しフォームを非表示にする
         timeEl.textContent = "待機中";
         disableInputs();
         setTimeout(startCountdown, 3000);
         return;
       }
-      // startTime を取得できたらフォームを表示する
       enableInputs();
       const endTime = startTime + 3*60*1000;
       const timer = setInterval(() => {
@@ -68,7 +71,6 @@
           clearInterval(timer);
           timeEl.textContent = "タイマー終了！";
           disableInputs();
-          // 5秒後に「待機中」を表示する
           setTimeout(() => {
             timeEl.textContent = "待機中";
           }, 5000);
@@ -80,19 +82,15 @@
       }, 1000);
     }
 
-    // タイマー終了時に入力欄を消す（非表示）ためのユーティリティ
     function disableInputs() {
       const formArea = document.getElementById('formArea');
       if (formArea) formArea.style.display = 'none';
       const sendBtn = document.getElementById('sendBtn');
       if (sendBtn) sendBtn.disabled = true;
       const message = document.getElementById('message');
-      if (message) {
-        message.textContent = '';
-      }
+      if (message) message.textContent = '';
     }
 
-    // フォームを再表示するユーティリティ
     function enableInputs() {
       const formArea = document.getElementById('formArea');
       if (formArea) formArea.style.display = '';
@@ -103,22 +101,71 @@
     startCountdown();
 
     document.getElementById("sendBtn").addEventListener("click", async () => {
-      const number = document.getElementById("number").value.trim();
-      const level = document.getElementById("level").value;
-      const answer = document.getElementById("answer").value.trim();
+      const numberEl = document.getElementById("number");
+      const levelEl = document.getElementById("level");
+      const answerEl = document.getElementById("answer");
       const message = document.getElementById("message");
+      const sendBtn = document.getElementById("sendBtn");
+
+      const number = numberEl.value.trim();
+      const level = levelEl.value;
+      const answer = answerEl.value.trim();
 
       if (!number || !level || !answer) {
-        message.textContent="すべての項目を入力してください"; message.style.color="red"; return;
+        message.textContent = "すべての項目を入力してください";
+        message.style.color = "red";
+        return;
       }
 
-      const result = (answer.toLowerCase()===correctAnswers[level].toLowerCase()) ? "正解" : "不正解";
+      // 判定（正答が未設定なら不正解扱い）
+      const correct = (typeof correctAnswers[level] === 'string' && correctAnswers[level].length > 0)
+        ? (answer.toLowerCase() === correctAnswers[level].toLowerCase())
+        : false;
 
-      await fetch(`${GAS_URL}?number=${encodeURIComponent(number)}&level=${encodeURIComponent(level)}&answer=${encodeURIComponent(answer)}&result=${encodeURIComponent(result)}`);
+      const result = correct ? "正解" : "不正解";
 
-      message.textContent=`送信完了！（${result}）`;
-      message.style.color = (result==="正解")?"green":"red";
-      document.getElementById("answer").value="";
+      // 判定メッセージ表示（送信中の案内も表示）
+      message.textContent = `判定: ${result} — 送信中...`;
+      message.style.color = correct ? "green" : "red";
+
+      // 送信中はボタンを無効化して多重送信防止
+      sendBtn.disabled = true;
+
+      // GAS に送信（判定後に送る）
+      try {
+        const params = new URLSearchParams({
+          number: number,
+          level: level,
+          answer: answer,
+          result: result
+        });
+        await fetch(`${GAS_URL}?${params.toString()}`);
+
+        // 判定に応じた最終メッセージ
+        if (correct) {
+          message.textContent = "正解でした！次の部屋へどうぞ。";
+          message.style.color = "green";
+        } else {
+          message.textContent = "不正解でした。もう一度チャレンジしてみましょう。";
+          message.style.color = "red";
+        }
+      } catch (err) {
+        // ネットワーク等で送信失敗した場合でも判定メッセージは出す
+        if (correct) {
+          message.textContent = "正解でした！次の部屋へどうぞ。（送信に失敗しました）";
+          message.style.color = "green";
+        } else {
+          message.textContent = "不正解でした。もう一度チャレンジしてみましょう。（送信に失敗しました）";
+          message.style.color = "red";
+        }
+      } finally {
+        // どちらの場合でも入力欄を空にする
+        numberEl.value = "";
+        levelEl.value = "";
+        answerEl.value = "";
+        // 再度ボタン有効化（タイマーでフォームが非表示なら影響なし）
+        sendBtn.disabled = false;
+      }
     });
   </script>
 </body>
