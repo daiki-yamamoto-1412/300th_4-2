@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>回答入力フォーム</title>
+<style>
+  body { text-align:center; font-family:sans-serif; margin-top:40px; background:#f8f9fa; }
+  #time { font-size:2em; margin-bottom:20px; }
+  input, select { font-size:1em; padding:8px; margin:5px; border-radius:8px; border:1px solid #ccc; width:200px; }
+  button { margin-top:15px; padding:10px 25px; font-size:16px; border:none; border-radius:8px; background:#007bff; color:white; cursor:pointer; }
+  button:disabled { background:#aaa; }
+  #message { margin-top:15px; font-weight:bold; }
+</style>
+</head>
+<body>
+  <h2>共有タイマー</h2>
+  <p id="time">待機中...</p>
+
+  <div id="formArea">
+    <h3>個人番号を入力</h3>
+    <input type="number" id="number" placeholder="例：0001" />
+
+    <h3>レベルを選択</h3>
+    <select id="level">
+      <option value="">選択してください</option>
+      <option value="レベル1">簡単</option>
+      <option value="レベル2">難しい</option>
+    </select>
+
+    <h3>回答を入力</h3>
+    <input type="text" id="answer" placeholder="回答を入力" />
+
+    <br>
+    <button id="sendBtn">送信</button>
+
+    <p id="message"></p>
+  </div>
+
+  <script>
+    const GAS_URL = "https://script.google.com/macros/s/AKfycbx75T9KLmPZsRRtMOz3vdoV4dIB38S5EE8JC1qnJrgngnyKGBcrMZHE3eM5lnbuCiRXXw/exec";
+    // 各レベルの正答を設定してください。例: "レベル1": "apple"
+    const correctAnswers = { "レベル1":"ちず", "レベル2":"のり" };
+
+    async function getStartTime() {
+      try {
+        const res = await fetch(GAS_URL);
+        const text = await res.text();
+        const startTime = Number(text);
+        if (isNaN(startTime) || startTime === 0) return null;
+        return startTime;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    async function startCountdown() {
+      const timeEl = document.getElementById("time");
+      const startTime = await getStartTime();
+      if (!startTime) {
+        timeEl.textContent = "待機中";
+        disableInputs();
+        setTimeout(startCountdown, 3000);
+        return;
+      }
+      enableInputs();
+      const endTime = startTime + 3*60*1000+10;
+      const timer = setInterval(() => {
+        const remaining = Math.floor((endTime - Date.now())/1000);
+        if (remaining <= 0) {
+          clearInterval(timer);
+          timeEl.textContent = "タイマー終了！";
+          disableInputs();
+          setTimeout(() => {
+            timeEl.textContent = "待機中";
+          }, 5000);
+          return;
+        }
+        const m = Math.floor(remaining/60);
+        const s = remaining % 60;
+        timeEl.textContent = `残り ${m}分${s}秒`;
+      }, 1000);
+    }
+
+    function disableInputs() {
+      const formArea = document.getElementById('formArea');
+      if (formArea) formArea.style.display = 'none';
+      const sendBtn = document.getElementById('sendBtn');
+      if (sendBtn) sendBtn.disabled = true;
+      const message = document.getElementById('message');
+      if (message) message.textContent = '';
+    }
+
+    function enableInputs() {
+      const formArea = document.getElementById('formArea');
+      if (formArea) formArea.style.display = '';
+      const sendBtn = document.getElementById('sendBtn');
+      if (sendBtn) sendBtn.disabled = false;
+    }
+
+    startCountdown();
+
+    document.getElementById("sendBtn").addEventListener("click", async () => {
+      const numberEl = document.getElementById("number");
+      const levelEl = document.getElementById("level");
+      const answerEl = document.getElementById("answer");
+      const message = document.getElementById("message");
+      const sendBtn = document.getElementById("sendBtn");
+
+      const number = numberEl.value.trim();
+      const level = levelEl.value;
+      const answer = answerEl.value.trim();
+
+      if (!number || !level || !answer) {
+        message.textContent = "すべての項目を入力してください";
+        message.style.color = "red";
+        return;
+      }
+
+      // 判定（正答が未設定なら不正解扱い）
+      const correct = (typeof correctAnswers[level] === 'string' && correctAnswers[level].length > 0)
+        ? (answer.toLowerCase() === correctAnswers[level].toLowerCase())
+        : false;
+
+      const result = correct ? "正解" : "不正解";
+
+      // 判定メッセージ表示（送信中の案内も表示）
+      message.textContent = `判定: ${result} — 送信中...`;
+      message.style.color = correct ? "green" : "red";
+
+      // 送信中はボタンを無効化して多重送信防止
+      sendBtn.disabled = true;
+
+      // GAS に送信（判定後に送る）
+      try {
+        const params = new URLSearchParams({
+          number: number,
+          level: level,
+          answer: answer,
+          result: result
+        });
+        await fetch(`${GAS_URL}?${params.toString()}`);
+
+        // 判定に応じた最終メッセージ
+        if (correct) {
+          message.textContent = "正解でした！次の部屋へどうぞ。";
+          message.style.color = "green";
+        } else {
+          message.textContent = "不正解でした。もう一度チャレンジしてみましょう。";
+          message.style.color = "red";
+        }
+      } catch (err) {
+        // ネットワーク等で送信失敗した場合でも判定メッセージは出す
+        if (correct) {
+          message.textContent = "正解でした！次の部屋へどうぞ。（送信に失敗しました）";
+          message.style.color = "green";
+        } else {
+          message.textContent = "不正解でした。もう一度チャレンジしてみましょう。（送信に失敗しました）";
+          message.style.color = "red";
+        }
+      } finally {
+        // どちらの場合でも入力欄を空にする
+        numberEl.value = "";
+        levelEl.value = "";
+        answerEl.value = "";
+        // 再度ボタン有効化（タイマーでフォームが非表示なら影響なし）
+        sendBtn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
