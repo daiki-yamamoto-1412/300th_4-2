@@ -29,7 +29,7 @@
     </select>
 
     <h3>回答を入力</h3>
-    <input type="text" id="answer" placeholder="回答を入力" />
+    <input type="text" id="answer" placeholder="回答を入力数字は半角" />
 
     <br>
     <button id="sendBtn">送信</button>
@@ -40,7 +40,7 @@
   <script>
     const GAS_URL = "https://script.google.com/macros/s/AKfycbx75T9KLmPZsRRtMOz3vdoV4dIB38S5EE8JC1qnJrgngnyKGBcrMZHE3eM5lnbuCiRXXw/exec";
     // 各レベルの正答を設定してください。例: "レベル1": "apple"
-    const correctAnswers = { "レベル1":"➂", "レベル2":"4人" };
+    const correctAnswers = { "レベル1":"3", "レベル2":"4人" };
 
     async function getStartTime() {
       try {
@@ -170,4 +170,5 @@
   </script>
 </body>
 </html>
+
 
